@@ -1,0 +1,16 @@
+{
+  "name": "pkEdisonApp",
+  "version": "0.0.0",
+  "description": "peace kitchen edison client for LED control",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "debug": "^2.1.3",
+      "lodash": "^3.6.0",
+      "socket.io-client": "*"
+  }
+}

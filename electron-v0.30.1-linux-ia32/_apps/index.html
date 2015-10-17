@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>main</title>
+    </head>
+    <body>
+        <!-- <script src="//code.jquery.com/jquery-1.11.3.min.js"></script> -->
+        <script>
+         var _ = require('lodash');
+         var ipc = require('ipc');
+         function sendIPCMessage(channel, data) {
+             ipc.send(channel, data);
+         };
+
+         sendIPCMessage('_debug', 'client ready');
+
+         function WebAudioAnalyser(audio, ctx, opts) {
+             window.AudioContext = window.AudioContext || window.webkitAudioContext;
+             if (!(this instanceof WebAudioAnalyser)) return new WebAudioAnalyser(audio, ctx, opts);
+             if (!(ctx instanceof AudioContext)) (opts = ctx), (ctx = null);
+
+             opts = opts || {};
+
+             this.ctx = ctx = ctx || (new AudioContext);
+
+             if (!(audio instanceof AudioNode)) {
+                 audio = audio instanceof Audio
+                       ? ctx.createMediaElementSource(audio)
+                     : ctx.createMediaStreamSource(audio);
+             }
+             
+             this.analyser = ctx.createAnalyser();
+             this.stereo   = !!opts.stereo;
+             this.audible  = opts.audible !== false;
+             this.wavedata = null;
+             this.freqdata = null;
+             this.splitter = null;
+             this.merger   = null;
+             this.source   = audio;
+             this._FFTSIZE = 32;
+             
+             if (!this.stereo) {
+                 sendIPCMessage('_debug', 'MONO');
+                 this.source.connect(this.analyser);
+                 this.analyser.fftSize = this._FFTSIZE;
+                 if (this.audible)
+                     this.analyser.connect(ctx.destination);
+             } else {
+                 sendIPCMessage('_debug', 'STEREO');
+                 this.analyser = [this.analyser];
+                 this.analyser.push(ctx.createAnalyser());
+
+                 this.splitter = ctx.createChannelSplitter(2);
+                 this.merger   = ctx.createChannelMerger(2);
+
+                 this.source.connect(this.splitter);
+
+                 for (var i = 0; i < 2; i++) {
+                     this.splitter.connect(this.analyser[i], i, 0);
+                     this.analyser[i].fftSize = this._FFTSIZE;
+                     this.analyser[i].connect(this.merger, 0, i);
+                 }
+
+                 if (this.audible)
+                     this.merger.connect(ctx.destination);
+             }
+
+             sendIPCMessage('_debug', 'AudioContext done');
+         };
+
+         WebAudioAnalyser.prototype.waveform = function(output, channel) {
+             if (!output) output = this.wavedata || (
+                 this.wavedata = new Uint8Array((this.analyser[0] || this.analyser).frequencyBinCount)
+             );
+
+             var analyser = this.stereo
+                          ? this.analyser[channel || 0]
+                          : this.analyser;
+
+             analyser.getByteTimeDomainData(output);
+
+             return output;
+         };
+
+         WebAudioAnalyser.prototype.frequencies = function(output, channel) {
+             if (!output) output = this.freqdata || (
+                 this.freqdata = new Uint8Array((this.analyser[0] || this.analyser).frequencyBinCount)
+             );
+
+             var analyser = this.stereo
+                          ? this.analyser[channel || 0]
+                          : this.analyser;
+
+             analyser.getByteFrequencyData(output);
+
+             return output;
+         };
+
+
+         var audio = new Audio();
+         var tracks;
+         /*
+         $.ajax({
+             url: 'http://api.soundcloud.com/tracks.json?client_id=SOUNDCLOUD_API_CLIENT_ID&limit=10',
+             dataType: 'json'
+         }).done(function(data){
+             tracks = [];
+             _.each(function(el){tracks.push('#' + el.id);});
+         });
+         */
+         tracks = ['#183615031', '#33553255', '#97387655', '#187178269', '#97387655', '#174231700']; // just demonstration!
+	       var trackID = '#187178269';
+         var url = 'https://api.soundcloud.com/tracks/' + _.sample(tracks).replace('#', '') + '/stream?client_id=SOUNDCLOUD_API_CLIENT_ID';
+         
+         audio.src  = url;
+         audio.loop = false;
+         audio.crossOrigin = 'anonymous';
+         
+         audio.addEventListener('canplay', function() {
+             sendIPCMessage('_debug', 'play!');
+             audio.play();
+         }, false);
+         audio.addEventListener('ended', function() {
+             sendIPCMessage('_debug', 'mix!');
+             var nurl = 'https://api.soundcloud.com/tracks/' + _.sample(tracks).replace('#', '') + '/stream?client_id=SOUNDCLOUD_API_CLIENT_ID';
+             audio.src = nurl;
+             //audio.loop = false;
+             //audio.crossOrigin = 'anonymous';
+         }, false);
+
+         var analyser = new WebAudioAnalyser(audio);
+
+         setInterval(function(){
+             //sendIPCMessage('_led', analyser.frequencies(null, 0)[9]);
+             sendIPCMessage('_iled', [
+                 analyser.frequencies(null, 0)[4],
+                 analyser.frequencies(null, 0)[6],
+                 analyser.frequencies(null, 0)[8],
+                 analyser.frequencies(null, 0)[10],
+                 analyser.frequencies(null, 0)[12]
+             ]);
+         }, 30);
+        </script>
+    </body>
+</html>
